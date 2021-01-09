@@ -77,17 +77,17 @@ void StopTaskForGo(char* taskId) {
 	setTaskState(taskId, STOP);
 }
 
-static void log_packet(const AVFormatContext* fmt_ctx, const AVPacket* pkt, const char* tag)
-{
-	AVRational* time_base = &fmt_ctx->streams[pkt->stream_index]->time_base;
-
-	printf("%s: pts:%s pts_time:%s dts:%s dts_time:%s duration:%s duration_time:%s stream_index:%d\n",
-		tag,
-		av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, time_base),
-		av_ts2str(pkt->dts), av_ts2timestr(pkt->dts, time_base),
-		av_ts2str(pkt->duration), av_ts2timestr(pkt->duration, time_base),
-		pkt->stream_index);
-}
+//static void log_packet(const AVFormatContext* fmt_ctx, const AVPacket* pkt, const char* tag)
+//{
+//	AVRational* time_base = &fmt_ctx->streams[pkt->stream_index]->time_base;
+//
+//	printf("%s: pts:%s pts_time:%s dts:%s dts_time:%s duration:%s duration_time:%s stream_index:%d\n",
+//		tag,
+//		av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, time_base),
+//		av_ts2str(pkt->dts), av_ts2timestr(pkt->dts, time_base),
+//		av_ts2str(pkt->duration), av_ts2timestr(pkt->duration, time_base),
+//		pkt->stream_index);
+//}
 
 
 // 初始化解码相关变量
@@ -352,7 +352,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 		out_stream = ss->ofmt_ctx->streams[ss->pkt->stream_index];
 
 		// 调试使用
-		log_packet(ss->ifmt_ctx, ss->pkt, "in");
+		//log_packet(ss->ifmt_ctx, ss->pkt, "in");
 
 		/* copy packet */
 		ss->pkt->pts = av_rescale_q_rnd(ss->pkt->pts, in_stream->time_base, out_stream->time_base, AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
@@ -361,7 +361,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 		ss->pkt->pos = -1;
 
 		// 调试使用
-		log_packet(ss->ofmt_ctx, ss->pkt, "out");
+		//log_packet(ss->ofmt_ctx, ss->pkt, "out");
 
 		ret = av_interleaved_write_frame(ss->ofmt_ctx, ss->pkt);
 		if (ret < 0) {
