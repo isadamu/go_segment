@@ -144,9 +144,6 @@ func (se *SegmentEngine) close() {
 		se.core.Stop()
 	}
 
-	se.lock.Lock()
-	defer se.lock.Unlock()
-
 	se.setState(SegmentEngineStateClose)
 
 	if se.core != nil {
