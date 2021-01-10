@@ -17,6 +17,14 @@ const (
 	LogMaxBackups = 0
 )
 
+const (
+	outputFolderHead = "segments"
+	tsTimeInterval   = 20
+	tsWrapLimit      = 3
+	snapTimeInterval = 20
+	snapWrapLimit    = 3
+)
+
 var SegmentMgr *SegmentManager = nil
 
 func main() {
@@ -34,7 +42,7 @@ func main() {
 	Info("begin")
 
 	if len(os.Args) != 3 {
-		_, _ = fmt.Fprintf(os.Stderr, "input params: <inputUrl> <num>")
+		_, _ = fmt.Fprintf(os.Stderr, "input params: <inputUrl> <num>\n")
 		return
 	}
 
@@ -50,13 +58,28 @@ func main() {
 	signalChan := getSignalChan()
 
 	SegmentMgr = NewSegmentManager()
+	SetCallBackMgr(SegmentMgr)
 
 	vhost := "aaa"
 	app := "bbb"
 	streamName := "ccc"
 
 	for i := 0; i < num; i++ {
-		SegmentMgr.AddTask(vhost, app, streamName, i, inputUrl+"_"+strconv.Itoa(i))
+		config := SegmentTaskConfig{
+			vhost:            vhost,
+			app:              app,
+			streamName:       streamName,
+			inputUrl:         inputUrl,
+			outputFolderHead: outputFolderHead,
+			tsTimeInterval:   tsTimeInterval,
+			tsWrapLimit:      tsWrapLimit,
+			snapTimeInterval: snapTimeInterval,
+			snapWrapLimit:    snapWrapLimit,
+		}
+		err := SegmentMgr.AddTask(config)
+		if err != nil {
+			fmt.Printf("addTask failed: %s\n", err)
+		}
 		time.Sleep(time.Millisecond * 200)
 	}
 

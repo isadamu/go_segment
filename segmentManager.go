@@ -3,25 +3,36 @@ package main
 import "C"
 
 import (
-	"fmt"
+	"errors"
 	"github.com/sasha-s/go-deadlock"
 	"strconv"
 )
 
-//export SegmentCallBackForC
-func SegmentCallBackForC(taskId, filePath string) {
-	// 用于c语言回调，貌似只能这么猥琐的来写了
+var (
+	ErrTaskIsAlreadyExist = errors.New("task is already exist")
+)
 
-	fmt.Printf("taskId [%s], filePath [%s]\n", taskId, filePath)
-	Info("taskId [%s], filePath [%s]", taskId, filePath)
+type SegmentTaskConfig struct {
+	vhost            string
+	app              string
+	streamName       string
+	inputUrl         string
+	outputFolderHead string
 
+	tsTimeInterval   int
+	tsWrapLimit      int
+	snapTimeInterval int
+	snapWrapLimit    int
 }
-
-const outputFolderHead = "segments/"
 
 type SegmentManager struct {
 	lock    deadlock.Mutex
 	engines map[string]*SegmentEngine
+
+	uidLock deadlock.Mutex
+	uid     int
+
+	outputFolderHead string
 }
 
 func NewSegmentManager() *SegmentManager {
@@ -30,23 +41,45 @@ func NewSegmentManager() *SegmentManager {
 	}
 }
 
-func (sm *SegmentManager) AddTask(vhost, app, streamName string, uid int, inputUrl string) {
+func (sm *SegmentManager) AddTask(taskConfig SegmentTaskConfig) error {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	taskId := sm.genTaskId(vhost, app, streamName, uid)
-	if _, ok := sm.engines[taskId]; ok {
-		Info("task %s is already running", taskId)
-		return
+	uid := sm.genUid()
+	taskId := sm.genTaskId(taskConfig.vhost, taskConfig.app, taskConfig.streamName, uid)
+	if _, ok := sm.engines[taskId]; ok { // 这个不可能发生，先就放这里吧
+		Error("task %s is already exists", taskId)
+		return ErrTaskIsAlreadyExist
 	}
 
-	outputFolder := outputFolderHead + vhost + "-" + app + "-" + streamName + "-" + strconv.Itoa(uid)
+	outputFolder := sm.genOutputFolder(taskConfig.vhost, taskConfig.app, taskConfig.streamName, uid)
 
-	engine := NewSegmentEngine(taskId, inputUrl, outputFolder)
+	engineConfig := SegmentEngineConfig{
+		taskId:           taskId,
+		inputUrl:         taskConfig.inputUrl,
+		outputFolder:     outputFolder,
+		tsTimeInterval:   taskConfig.tsTimeInterval,
+		tsWrapLimit:      taskConfig.tsWrapLimit,
+		snapTimeInterval: taskConfig.snapTimeInterval,
+		snapWrapLimit:    taskConfig.snapWrapLimit,
+	}
 
-	engine.Start()
+	engine, err := NewSegmentEngine(sm, engineConfig)
+	if err != nil {
+		Error("create segment engine %s failed: %s", taskId, err)
+		return err
+	}
+
+	err = engine.Start()
+	if err != nil {
+		Error("start segment engine %s err: %s", taskId, err)
+		engine.close()
+		return err
+	}
 
 	sm.engines[taskId] = engine
+
+	return nil
 }
 
 func (sm *SegmentManager) DelTask(vhost, app, streamName string, uid int) {
@@ -70,4 +103,18 @@ func (sm *SegmentManager) DelTask(vhost, app, streamName string, uid int) {
 
 func (sm *SegmentManager) genTaskId(vhost, app, streamName string, uid int) string {
 	return vhost + "/" + app + "/" + streamName + "/" + strconv.Itoa(uid)
+}
+
+func (sm *SegmentManager) genOutputFolder(vhost, app, streamName string, uid int) string {
+	return sm.outputFolderHead + "/" + vhost + "/" + app + "/" + streamName + "/" + strconv.Itoa(uid)
+}
+
+func (sm *SegmentManager) genUid() int {
+	sm.uidLock.Lock()
+	defer sm.uidLock.Unlock()
+
+	uid := sm.uid
+	sm.uid++
+
+	return uid
 }

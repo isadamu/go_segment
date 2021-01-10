@@ -14,64 +14,69 @@ package main
 import "C"
 
 import (
-	"strings"
 	"unsafe"
 )
 
-const (
-	timeInterval = 20
-	wrapLimit    = 3
-)
+/**
+ts切割，直接与底层c对接
+*/
 
 type CSegment struct {
-	taskId       string
-	inputUrl     string
-	outputFolder string
+	hasSentStop bool // 是否发送过结束命令
+
+	config *SegmentEngineConfig
 }
 
 // 初始化
-// void InitSnapshotStruct(void** ppSnapshot, char* taskId, char* inputUrl, char* outputFolder, int timeInterval, int wrapLimit);
-func NewCSegment(taskId, inputUrl, outputFolder string) *CSegment {
-	if strings.HasSuffix(outputFolder, "/") {
-		outputFolder = outputFolder[:len(outputFolder)-1]
-	}
+func NewCSegment(config *SegmentEngineConfig) *CSegment {
 
 	cs := &CSegment{
-		taskId:       taskId,
-		inputUrl:     inputUrl,
-		outputFolder: outputFolder,
+		config: config,
 	}
 
 	return cs
 }
 
 // 开始截图
-func (cs *CSegment) Start() {
-	taskIdC := C.CString(cs.taskId)
-	inputUrlC := C.CString(cs.inputUrl)
-	outputFolderC := C.CString(cs.outputFolder)
+func (cs *CSegment) Run() int {
+	taskIdC := C.CString(cs.config.taskId)
+	inputUrlC := C.CString(cs.config.inputUrl)
+	outputFolderC := C.CString(cs.config.outputFolder)
 
 	defer C.free(unsafe.Pointer(taskIdC))
 	defer C.free(unsafe.Pointer(inputUrlC))
 	defer C.free(unsafe.Pointer(outputFolderC))
 
-	timeInterval := C.int(timeInterval)
-	wrapLimit := C.int(wrapLimit)
+	tsTimeInterval := C.int(cs.config.tsTimeInterval)
+	tsWrapLimit := C.int(cs.config.tsWrapLimit)
+	snapTimeInterval := C.int(cs.config.snapTimeInterval)
+	snapWrapLimit := C.int(cs.config.snapWrapLimit)
 
-	//int SnapShotStructRun(SnapShotTask* sst, char* taskId, char* inputUrl, char* outputFolder, int timeInterval, int wrapLimit);
-	ret := C.SegmentStructRun(taskIdC, inputUrlC, outputFolderC, timeInterval, wrapLimit)
+	// int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTimeInterval, int tsWrapLimit, int snapTimeInterval, int snapWrapLimit);
+	ret := C.SegmentStructRun(taskIdC, inputUrlC, outputFolderC, tsTimeInterval, tsWrapLimit, snapTimeInterval, snapWrapLimit)
 
-	Info("task %s ret %d", cs.taskId, ret)
+	if ret < 0 {
+		Error("task %s end, ret [%d]", cs.config.taskId, ret)
+	} else {
+		Info("task %s end, ret [%d]", cs.config.taskId, ret)
+	}
+
+	return ret
 }
 
 func (cs *CSegment) Stop() {
-	taskIdC := C.CString(cs.taskId)
+	taskIdC := C.CString(cs.config.taskId)
 	defer C.free(unsafe.Pointer(taskIdC))
 
 	C.StopTaskForGo(taskIdC)
+
+	cs.hasSentStop = true
 }
 
 // 关闭，释放资源
+// 这里需要先stop再往后
 func (cs *CSegment) close() {
-
+	if !cs.hasSentStop {
+		cs.Stop()
+	}
 }

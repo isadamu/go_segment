@@ -39,6 +39,7 @@ void initGlobal() {
 	initTaskStateMap();      // 初始化任务的状态队列
 }
 
+// 如果map本来没有，则会新添加
 void setTaskState(char* taskId, int state) {
 	pthread_mutex_lock(&taskMapMute);
 	map_set(&taskStateMap, taskId, state);
@@ -74,7 +75,14 @@ int interruptCallBack(void* taskId) {
 }
 
 void StopTaskForGo(char* taskId) {
-	setTaskState(taskId, STOP);
+	pthread_mutex_lock(&taskMapMute);
+	int* val = map_get(&taskStateMap, taskId);
+	if (val == NULL) { // 不存在这个 task
+		LogError("task %s not exists", taskId);
+	} else {
+		map_set(&taskStateMap, taskId, STOP);
+	}
+	pthread_mutex_unlock(&taskMapMute);
 }
 
 //static void log_packet(const AVFormatContext* fmt_ctx, const AVPacket* pkt, const char* tag)
@@ -215,22 +223,24 @@ void freeInput(Segment* ss) {
 void freeOutput(Segment* ss) {
 	if (ss->ofmt_ctx != NULL) {
 		av_write_trailer(ss->ofmt_ctx);
-		GoSegmentCallBackForC(ss->taskId, ss->nameBuffer);
 	}
 	if (ss->ofmt_ctx && !(ss->ofmt_ctx->flags & AVFMT_NOFILE)) {
 		avio_closep(&(ss->ofmt_ctx->pb));
 	}
 	if (ss->ofmt_ctx != NULL) {
 		avformat_free_context(ss->ofmt_ctx);
+
+		// 在这里将ts回调给go程序
+		GoTsCallBackForC(ss->taskId, ss->nameBuffer, ss->tsBeginTime, ss->tsLastTime);
 		ss->ofmt_ctx = NULL;
 	}
 }
 
 
 // 构建输出文件名，例如 0.ts  1.ts 2.ts 前面假设文件夹路径
-void constuctFileName(Segment* ss) {
+void constuctTsFileName(Segment* ss) {
 	char intBuf[32];
-	sprintf(intBuf, "%d", ss->wrap_count);
+	sprintf(intBuf, "%d", ss->tsWrapCount);
 
 	memset(ss->nameBuffer, 0, sizeof(ss->nameBuffer));
 	strcat(ss->nameBuffer, ss->outputFolder);
@@ -238,10 +248,10 @@ void constuctFileName(Segment* ss) {
 	strcat(ss->nameBuffer, intBuf);
 	strcat(ss->nameBuffer, ".ts");
 
-	ss->wrap_count = (ss->wrap_count + 1) % ss->wrap_limit;
+	ss->tsWrapCount = (ss->tsWrapCount + 1) % ss->tsWrapLimit;
 }
 
-Segment* initSegmentStruct(char* taskId, char* inputUrl, char* outputFolder, int timeInterval, int wrapLimit) {
+Segment* initSegmentStruct(char* taskId, char* inputUrl, char* outputFolder, int tsTimeInterval, int tsWrapLimit, int snapTimeInterval, int snapWrapLimit) {
 
 	Segment* ss = (Segment*)malloc(sizeof(Segment));
 
@@ -249,11 +259,20 @@ Segment* initSegmentStruct(char* taskId, char* inputUrl, char* outputFolder, int
 	strcpy(ss->inputUrl, inputUrl);
 	strcpy(ss->outputFolder, outputFolder);
 
-	ss->time_interval = timeInterval;
-	ss->wrap_limit = wrapLimit;
+	ss->tsTimeInterval = tsTimeInterval;
+	ss->tsWrapLimit = tsWrapLimit;
+
+	ss->tsBeginTime = -1;
+	ss->tsLastTime = -1;
 
 	ss->tsCount = 0;
-	ss->wrap_count = 0;
+	ss->tsWrapCount = 0;
+
+	ss->snapTimeInterval = snapTimeInterval;
+	ss->snapWrapLimit = snapWrapLimit;
+
+	ss->snapCount = 0;
+	ss->snapWrapCount = 0;
 
 	ss->ifmt_ctx = NULL;
 	ss->ofmt_ctx = NULL;
@@ -263,14 +282,14 @@ Segment* initSegmentStruct(char* taskId, char* inputUrl, char* outputFolder, int
 	return ss;
 }
 
-int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeInterval, int wrapLimit) {
+int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTimeInterval, int tsWrapLimit, int snapTimeInterval, int snapWrapLimit) {
 
 	// 初始化各种参数
 	initGlobal();
 
 	int ret;
 
-	Segment* ss = initSegmentStruct(taskId, inputUrl, outputFolder, timeInterval, wrapLimit);
+	Segment* ss = initSegmentStruct(taskId, inputUrl, outputFolder, tsTimeInterval, tsWrapLimit, snapTimeInterval, snapWrapLimit);
 
 	// 设置任务状态
 	setTaskState(ss->taskId, RUNNING);
@@ -298,7 +317,6 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 	/**********************************************************************/
 	/****************************** 循环 切 ts ***************************/
 	int isFirst = 1;
-	double beginTime = -1, lastTime = -1;
 	while (1) {
 
 		ret = av_read_frame(ss->ifmt_ctx, ss->pkt);
@@ -317,8 +335,8 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 			isFirst = 0;
 
 			double timeStamp = ss->pkt->pts * av_q2d(ss->ifmt_ctx->streams[ss->video_index]->time_base);
-			beginTime = timeStamp;
-			lastTime = timeStamp;
+			ss->tsBeginTime = timeStamp;
+			ss->tsLastTime = timeStamp;
 			ret = openOutput(ss);
 			if (ret < 0) {
 				goto end;
@@ -329,10 +347,10 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 		if ((ss->pkt->stream_index == ss->video_index) && (ss->pkt->flags & AV_PKT_FLAG_KEY)) {
 			double timeStamp = ss->pkt->pts * av_q2d(ss->ifmt_ctx->streams[ss->video_index]->time_base);
 
-			lastTime = timeStamp;
-			if ((lastTime - beginTime) >= ss->time_interval) {
-				beginTime = timeStamp;
+			ss->tsLastTime = timeStamp;
+			if ((ss->tsLastTime - ss->tsBeginTime) >= ss->tsTimeInterval) {
 				ret = openOutput(ss);
+				ss->tsBeginTime = timeStamp;
 				if (ret < 0) {
 					goto end;
 				}
@@ -365,9 +383,6 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int timeI
 
 		ret = av_interleaved_write_frame(ss->ofmt_ctx, ss->pkt);
 		if (ret < 0) {
-			if (ret == -22) {
-
-			}
 			LogInfo("task %s error muxing packet", ss->taskId);
 			break;
 		}
