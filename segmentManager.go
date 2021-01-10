@@ -1,7 +1,5 @@
 package main
 
-import "C"
-
 import (
 	"errors"
 	"github.com/sasha-s/go-deadlock"
