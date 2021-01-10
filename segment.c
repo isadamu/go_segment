@@ -157,7 +157,7 @@ int openOutput(Segment* ss) {
 
 	freeOutput(ss);
 
-	constuctFileName(ss);
+	constuctTsFileName(ss);
 
 	avformat_alloc_output_context2(&(ss->ofmt_ctx), NULL, NULL, ss->nameBuffer);
 	if (!(ss->ofmt_ctx)) {
