@@ -11,11 +11,10 @@ var (
 )
 
 type SegmentTaskConfig struct {
-	vhost            string
-	app              string
-	streamName       string
-	inputUrl         string
-	outputFolderHead string
+	vhost      string
+	app        string
+	streamName string
+	inputUrl   string
 
 	tsTimeInterval   int
 	tsWrapLimit      int
@@ -33,9 +32,11 @@ type SegmentManager struct {
 	outputFolderHead string
 }
 
-func NewSegmentManager() *SegmentManager {
+func NewSegmentManager(outputFolderHead string) *SegmentManager {
 	return &SegmentManager{
 		engines: make(map[string]*SegmentEngine),
+
+		outputFolderHead: outputFolderHead,
 	}
 }
 

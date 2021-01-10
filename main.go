@@ -57,7 +57,7 @@ func main() {
 	// 捕捉系统信号
 	signalChan := getSignalChan()
 
-	SegmentMgr = NewSegmentManager()
+	SegmentMgr = NewSegmentManager(outputFolderHead)
 	SetCallBackMgr(SegmentMgr)
 
 	vhost := "aaa"
@@ -70,7 +70,6 @@ func main() {
 			app:              app,
 			streamName:       streamName,
 			inputUrl:         inputUrl,
-			outputFolderHead: outputFolderHead,
 			tsTimeInterval:   tsTimeInterval,
 			tsWrapLimit:      tsWrapLimit,
 			snapTimeInterval: snapTimeInterval,
