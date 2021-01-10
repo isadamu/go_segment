@@ -1,7 +1,7 @@
 #include "_cgo_export.h"
 #include <string.h>
 
-void GoTsCallBackForC(char* taskId, char* filePath, double tsBegineTime, double tsEndTime) {
+void GoTsCallBackForC(char* taskId, char* filePath, double tsBeginTime, double tsEndTime) {
 	GoString go_taskId = {p: taskId, n: strlen(taskId)};
 	GoString go_filePath = {p: filePath, n: strlen(filePath)};
 
