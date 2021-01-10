@@ -287,7 +287,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 	// 初始化各种参数
 	initGlobal();
 
-	int ret;
+	int ret = 0;
 
 	Segment* ss = initSegmentStruct(taskId, inputUrl, outputFolder, tsTimeInterval, tsWrapLimit, snapTimeInterval, snapWrapLimit);
 
@@ -299,6 +299,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 	// openInput
 	ret = openInput(ss);
 	if (ret < 0) {
+		LogError("task %s openInput error", ss->taskId);
 		goto end;
 	}
 
@@ -321,6 +322,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 
 		ret = av_read_frame(ss->ifmt_ctx, ss->pkt);
 		if (ret < 0) {
+			LogError("task %s av_read_frame failed, maybe cause by interrupt", ss->taskId);
 			break;
 		}
 
@@ -339,6 +341,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 			ss->tsLastTime = timeStamp;
 			ret = openOutput(ss);
 			if (ret < 0) {
+				LogError("task %s openOutput error", ss->taskId);
 				goto end;
 			}
 		}
@@ -352,6 +355,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 				ret = openOutput(ss);
 				ss->tsBeginTime = timeStamp;
 				if (ret < 0) {
+					LogError("task %s openOutput error", ss->taskId);
 					goto end;
 				}
 			}
@@ -383,7 +387,7 @@ int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTim
 
 		ret = av_interleaved_write_frame(ss->ofmt_ctx, ss->pkt);
 		if (ret < 0) {
-			LogInfo("task %s error muxing packet", ss->taskId);
+			LogError("task %s error muxing packet", ss->taskId);
 			break;
 		}
 		av_packet_unref(ss->pkt);
