@@ -53,7 +53,9 @@ func (cs *CSegment) Run() int {
 	snapWrapLimit := C.int(cs.config.snapWrapLimit)
 
 	// int SegmentStructRun(char* taskId, char* inputUrl, char* outputFolder, int tsTimeInterval, int tsWrapLimit, int snapTimeInterval, int snapWrapLimit);
-	ret := C.SegmentStructRun(taskIdC, inputUrlC, outputFolderC, tsTimeInterval, tsWrapLimit, snapTimeInterval, snapWrapLimit)
+	retC := C.SegmentStructRun(taskIdC, inputUrlC, outputFolderC, tsTimeInterval, tsWrapLimit, snapTimeInterval, snapWrapLimit)
+
+	ret := int(retC)
 
 	if ret < 0 {
 		Error("task %s end, ret [%d]", cs.config.taskId, ret)
