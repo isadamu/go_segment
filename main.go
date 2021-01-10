@@ -69,7 +69,7 @@ func main() {
 			vhost:            vhost,
 			app:              app,
 			streamName:       streamName,
-			inputUrl:         inputUrl,
+			inputUrl:         inputUrl + "_" + strconv.Itoa(i),
 			tsTimeInterval:   tsTimeInterval,
 			tsWrapLimit:      tsWrapLimit,
 			snapTimeInterval: snapTimeInterval,
